@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>GlassAI - 液态玻璃风格智能助手</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <!-- 开源AI模型库 -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.14.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#0071e3',
+            secondary: '#34c759',
+            accent: '#af52de',
+            neutral: '#8e8e93',
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      /* 液态玻璃核心样式 */
+      .glass {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        box-shadow: 0 8px 32px 0 rgba(18, 26, 65, 0.1);
+      }
+      .glass-dark {
+        background: rgba(15, 15, 20, 0.7);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .glass-input {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .glass-input:focus {
+        border-color: theme('colors.primary');
+        box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.2);
+      }
+      
+      /* 苹果风格细节动画 */
+      .animate-float {
+        animation: float 6s ease-in-out infinite;
+      }
+      .animate-pulse-slow {
+        animation: pulse 5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      .animate-bounce-subtle {
+        animation: bounce-subtle 2s infinite;
+      }
+      .animate-slide-in {
+        animation: slide-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+      .animate-fade-in {
+        animation: fade-in 0.5s ease forwards;
+      }
+      .animate-scale {
+        transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+      }
+      .animate-scale:hover {
+        transform: scale(1.02);
+      }
+      .animate-ripple {
+        position: relative;
+        overflow: hidden;
+      }
+      .animate-ripple::after {
+        content: "";
+        display: block;
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        pointer-events: none;
+        background-image: radial-gradient(circle, #fff 10%, transparent 10.01%);
+        background-repeat: no-repeat;
+        background-position: 50%;
+        transform: scale(10, 10);
+        opacity: 0;
+        transition: transform 0.5s, opacity 0.3s;
+      }
+      .animate-ripple:active::after {
+        transform: scale(0, 0);
+        opacity: 0.3;
+        transition: 0s;
+      }
+      .animate-typing {
+        display: inline-block;
+        overflow: hidden;
+        border-right: 0.15em solid theme('colors.primary');
+        white-space: nowrap;
+        margin: 0 auto;
+        animation: typing 3.5s steps(40, end), blink-caret 0.75s step-end infinite;
+      }
+      .animate-progress {
+        position: relative;
+        overflow: hidden;
+      }
+      .animate-progress::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+        animation: progress 1.5s infinite;
+      }
+      
+      /* 自定义滚动条 */
+      .scrollbar-thin {
+        scrollbar-width: thin;
+      }
+      .scrollbar-thin::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      
+      /* 苹果风格组件 */
+      .mac-btn {
+        @apply glass rounded-lg px-4 py-2 text-sm font-medium transition-all duration-300 animate-ripple animate-scale;
+      }
+      .mac-btn-primary {
+        @apply bg-primary hover:bg-primary/90 text-white;
+      }
+      .mac-btn-secondary {
+        @apply hover:bg-white/10 text-white;
+      }
+      .tool-item {
+        @apply w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 transition-all duration-300 animate-ripple;
+      }
+      .tab-item {
+        @apply px-4 py-2 rounded-lg text-sm transition-all duration-300 hover:bg-white/10;
+      }
+      .tab-item.active {
+        @apply bg-white/10 font-medium;
+      }
+      
+      /* 动画关键帧 */
+      @keyframes float {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+        100% { transform: translateY(0px); }
+      }
+      @keyframes bounce-subtle {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-3px); }
+      }
+      @keyframes slide-in {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes typing {
+        from { width: 0 }
+        to { width: 100% }
+      }
+      @keyframes blink-caret {
+        from, to { border-color: transparent }
+        50% { border-color: theme('colors.primary'); }
+      }
+      @keyframes progress {
+        100% { left: 100%; }
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-800 text-white min-h-screen font-sans overflow-x-hidden">
+  <!-- 背景装饰 - 苹果风格光晕效果 -->
+  <div class="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+    <div class="absolute top-[-300px] left-[-100px] w-[600px] h-[600px] rounded-full bg-primary/15 blur-[150px] animate-pulse-slow"></div>
+    <div class="absolute bottom-[-200px] right-[-100px] w-[500px] h-[500px] rounded-full bg-accent/15 blur-[120px] animate-pulse-slow" style="animation-delay: 2s;"></div>
+    <div class="absolute top-[30%] right-[20%] w-[300px] h-[300px] rounded-full bg-secondary/10 blur-[100px] animate-pulse-slow" style="animation-delay: 1s;"></div>
+  </div>
+
+  <!-- 主容器 -->
+  <div class="relative z-10 flex flex-col h-screen max-w-7xl mx-auto px-4 md:px-6">
+    <!-- 顶部导航栏 -->
+    <header class="glass-dark py-4 z-30">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-full bg-gradient-to-r from-primary to-accent flex items-center justify-center animate-float">
+            <i class="fa fa-brain text-xl"></i>
+          </div>
+          <h1 class="text-xl font-semibold tracking-tight">GlassAI</h1>
+        </div>
+        
+        <div class="flex items-center space-x-1 md:space-x-3">
+          <button class="tool-item" id="themeToggle">
+            <i class="fa fa-moon-o"></i>
+          </button>
+          <button class="tool-item" id="settingsBtn">
+            <i class="fa fa-cog"></i>
+          </button>
+          <button class="tool-item relative" id="notificationsBtn">
+            <i class="fa fa-bell-o"></i>
+            <span class="absolute top-1 right-1 w-2 h-2 bg-secondary rounded-full"></span>
+          </button>
+          <div class="h-6 w-px bg-white/10 mx-1 hidden md:block"></div>
+          <button class="tool-item overflow-hidden rounded-full border border-white/20" id="userProfile">
+            <img src="https://picsum.photos/id/64/100/100" alt="用户头像" class="w-full h-full object-cover">
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主要内容区 -->
+    <main class="flex-1 flex flex-col md:flex-row gap-4 py-2 overflow-hidden">
+      <!-- 左侧功能区 -->
+      <div class="w-full md:w-64 lg:w-72 glass-dark rounded-2xl p-4 flex flex-col gap-4 animate-slide-in" style="animation-delay: 0.1s;">
+        <div>
+          <h2 class="text-sm font-medium text-neutral mb-3">功能</h2>
+          <div class="space-y-1">
+            <button class="tab-item active w-full flex items-center justify-between">
+              <span><i class="fa fa-comment-o mr-2"></i> 聊天</span>
+              <span class="bg-primary/20 text-primary text-xs px-2 py-0.5 rounded-full">新</span>
+            </button>
+            <button class="tab-item w-full flex items-center">
+              <i class="fa fa-camera mr-2"></i> 图像识别
+            </button>
+            <button class="tab-item w-full flex items-center">
+              <i class="fa fa-lightbulb-o mr-2"></i> 创意生成
+            </button>
+            <button class="tab-item w-full flex items-center">
+              <i class="fa fa-bar-chart mr-2"></i> 数据分析
+            </button>
+          </div>
+        </div>
+        
+        <div class="h-px bg-white/10"></div>
+        
+        <div>
+          <h2 class="text-sm font-medium text-neutral mb-3">历史记录</h2>
+          <div class="space-y-2 max-h-40 overflow-y-auto scrollbar-thin pr-1">
+            <div class="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-sm">
+              <p class="truncate">识别了一张猫咪的照片</p>
+              <p class="text-xs text-neutral mt-1">今天 14:32</p>
+            </div>
+            <div class="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-sm">
+              <p class="truncate">生成了旅行计划</p>
+              <p class="text-xs text-neutral mt-1">昨天 20:15</p>
+            </div>
+            <div class="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-sm">
+              <p class="truncate">分析了月度支出数据</p>
+              <p class="text-xs text-neutral mt-1">06-18 10:05</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="mt-auto">
+          <button class="mac-btn mac-btn-primary w-full flex items-center justify-center">
+            <i class="fa fa-plus mr-2"></i> 新对话
+          </button>
+        </div>
+      </div>
+      
+      <!-- 中间聊天区 -->
+      <div class="flex-1 flex flex-col glass-dark rounded-2xl overflow-hidden animate-slide-in" style="animation-delay: 0.2s;">
+        <!-- 聊天内容区 -->
+        <div id="chatMessages" class="flex-1 p-4 md:p-6 overflow-y-auto scrollbar-thin space-y-6">
+          <!-- 欢迎消息 -->
+          <div class="animate-fade-in">
+            <div class="flex items-start gap-3">
+              <div class="w-9 h-9 rounded-full bg-gradient-to-r from-primary to-accent flex items-center justify-center flex-shrink-0">
+                <i class="fa fa-brain"></i>
+              </div>
+              <div class="glass rounded-xl p-4 max-w-[85%] animate-scale">
+                <p class="mb-3">你好！我是 GlassAI，一个智能助手。我可以帮助你：</p>
+                <ul class="list-disc pl-5 space-y-1 text-sm">
+                  <li>识别图片中的物体</li>
+                  <li>回答各种问题</li>
+                  <li>生成创意内容</li>
+                  <li>分析简单数据</li>
+                </ul>
+                <p class="mt-3 text-sm text-neutral">试着上传一张图片，或者输入文字提问吧！</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 动态消息将在这里插入 -->
+        </div>
+        
+        <!-- 图片预览区 -->
+        <div id="imagePreviewContainer" class="hidden px-4 md:px-6 pb-4">
+          <div class="glass rounded-xl p-3 relative">
+            <img id="imagePreview" src="" alt="预览图片" class="w-full h-auto rounded-lg">
+            <button id="removeImage" class="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center hover:bg-black/70 transition-colors">
+              <i class="fa fa-times"></i>
+            </button>
+            <div class="mt-3 flex justify-end">
+              <button id="analyzeImage" class="mac-btn mac-btn-primary text-sm">
+                <i class="fa fa-search mr-1"></i> 分析图片
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 输入区 -->
+        <div class="p-4 md:p-6 border-t border-white/10">
+          <div class="flex gap-2 mb-3">
+            <button id="uploadImageBtn" class="tool-item">
+              <i class="fa fa-picture-o"></i>
+            </button>
+            <button class="tool-item">
+              <i class="fa fa-file-text-o"></i>
+            </button>
+            <button class="tool-item">
+              <i class="fa fa-microphone"></i>
+            </button>
+            <input type="file" id="imageUpload" accept="image/*" class="hidden">
+          </div>
+          
+          <div class="relative">
+            <textarea id="userInput" placeholder="输入消息或提问..." class="glass-input w-full rounded-xl p-3 pr-12 text-sm resize-none focus:outline-none scrollbar-thin" rows="1"></textarea>
+            <button id="sendBtn" class="absolute right-2 bottom-2 mac-btn mac-btn-primary">
+              <i class="fa fa-paper-plane-o"></i>
+            </button>
+          </div>
+          
+          <p class="text-xs text-neutral mt-3 text-center">
+            GlassAI 会尽力提供准确信息，但可能存在错误。请谨慎使用。
+          </p>
+        </div>
+      </div>
+      
+      <!-- 右侧信息面板 (仅桌面显示) -->
+      <div class="hidden lg:block w-80 glass-dark rounded-2xl p-4 flex flex-col gap-4 animate-slide-in" style="animation-delay: 0.3s;">
+        <div>
+          <h2 class="text-sm font-medium text-neutral mb-3">识别结果</h2>
+          <div id="recognitionResult" class="glass rounded-xl p-4 text-center text-neutral">
+            <i class="fa fa-image text-3xl mb-2 opacity-50"></i>
+            <p>上传图片进行识别</p>
+          </div>
+        </div>
+        
+        <div class="h-px bg-white/10"></div>
+        
+        <div>
+          <h2 class="text-sm font-medium text-neutral mb-3">识别概率</h2>
+          <div class="glass rounded-xl p-4 h-48">
+            <canvas id="recognitionChart"></canvas>
+          </div>
+        </div>
+        
+        <div class="h-px bg-white/10"></div>
+        
+        <div>
+          <h2 class="text-sm font-medium text-neutral mb-3">快捷功能</h2>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="mac-btn mac-btn-secondary text-center text-sm py-3">
+              <i class="fa fa-shopping-bag block mx-auto mb-1"></i> 商品识别
+            </button>
+            <button class="mac-btn mac-btn-secondary text-center text-sm py-3">
+              <i class="fa fa-car block mx-auto mb-1"></i> 车辆识别
+            </button>
+            <button class="mac-btn mac-btn-secondary text-center text-sm py-3">
+              <i class="fa fa-tree block mx-auto mb-1"></i> 植物识别
+            </button>
+            <button class="mac-btn mac-btn-secondary text-center text-sm py-3">
+              <i class="fa fa-qrcode block mx-auto mb-1"></i> 扫码识别
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+    
+    <!-- 底部状态栏 -->
+    <footer class="glass-dark py-2 px-4 text-xs text-neutral flex justify-between items-center z-30">
+      <div class="flex items-center gap-4">
+        <span>GlassAI v1.0</span>
+        <span>已离线</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span id="currentTime">12:00</span>
+        <span>
+          <i class="fa fa-wifi"></i>
+        </span>
+        <span>
+          <i class="fa fa-battery-three-quarters"></i>
+        </span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- 加载中弹窗 -->
+  <div id="loadingModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+    <div class="glass rounded-2xl p-6 max-w-xs w-full text-center">
+      <div class="w-16 h-16 mx-auto rounded-full bg-primary/20 flex items-center justify-center mb-4 animate-bounce-subtle">
+        <i class="fa fa-cog fa-spin text-2xl text-primary"></i>
+      </div>
+      <h3 class="font-medium mb-2">处理中</h3>
+      <p class="text-sm text-neutral mb-4">正在分析，请稍候...</p>
+      <div class="h-1 glass rounded-full overflow-hidden">
+        <div class="h-full w-1/3 bg-primary animate-progress rounded-full"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // DOM元素
+      const chatMessages = document.getElementById('chatMessages');
+      const userInput = document.getElementById('userInput');
+      const sendBtn = document.getElementById('sendBtn');
+      const uploadImageBtn = document.getElementById('uploadImageBtn');
+      const imageUpload = document.getElementById('imageUpload');
+      const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+      const imagePreview = document.getElementById('imagePreview');
+      const removeImage = document.getElementById('removeImage');
+      const analyzeImage = document.getElementById('analyzeImage');
+      const loadingModal = document.getElementById('loadingModal');
+      const recognitionResult = document.getElementById('recognitionResult');
+      const themeToggle = document.getElementById('themeToggle');
+      const currentTime = document.getElementById('currentTime');
+      
+      // 变量
+      let mobilenetModel = null;
+      let isDarkMode = true;
+      let recognitionChart = null;
+      
+      // 初始化时间显示
+      updateTime();
+      setInterval(updateTime, 60000);
+      
+      // 初始化图表
+      initChart();
+      
+      // 加载AI模型
+      loadAIModel();
+      
+      // 调整输入框高度
+      userInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight < 120 ? this.scrollHeight : 120) + 'px';
+      });
+      
+      // 发送消息
+      sendBtn.addEventListener('click', sendMessage);
+      userInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+      
+      // 上传图片
+      uploadImageBtn.addEventListener('click', function() {
+        imageUpload.click();
+      });
+      
+      imageUpload.addEventListener('change', function(e) {
+        if (e.target.files && e.target.files[0]) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            imagePreview.src = e.target.result;
+            imagePreviewContainer.classList.remove('hidden');
+          }
+          reader.readAsDataURL(e.target.files[0]);
+        }
+      });
+      
+      // 移除图片
+      removeImage.addEventListener('click', function() {
+        imagePreviewContainer.classList.add('hidden');
+        imageUpload.value = '';
+        imagePreview.src = '';
+      });
+      
+      // 分析图片
+      analyzeImage.addEventListener('click', function() {
+        if (!mobilenetModel) {
+          showMessage('模型尚未加载完成，请稍候', 'ai');
+          return;
+        }
+        
+        showLoading(true);
+        
+        // 识别图片
+        const img = document.getElementById('imagePreview');
+        mobilenetModel.classify(img).then(predictions => {
+          showLoading(false);
+          displayRecognitionResults(predictions);
+          
+          // 添加AI回复
+          let response = `我识别到这张图片可能是：\n`;
+          predictions.forEach((pred, index) => {
+            response += `${index + 1}. ${pred.className} (可信度: ${Math.round(pred.probability * 100)}%)\n`;
+          });
+          
+          showMessage(response, 'ai');
+          
+          // 清空图片预览
+          imagePreviewContainer.classList.add('hidden');
+          imageUpload.value = '';
+          imagePreview.src = '';
+        }).catch(err => {
+          showLoading(false);
+          showMessage('识别失败: ' + err.message, 'ai');
+          console.error('识别错误:', err);
+        });
+      });
+      
+      // 主题切换
+      themeToggle.addEventListener('click', function() {
+        isDarkMode = !isDarkMode;
+        const body = document.body;
+        
+        if (isDarkMode) {
+          this.innerHTML = '<i class="fa fa-moon-o"></i>';
+          body.classList.remove('from-gray-50', 'via-gray-100', 'to-gray-200');
+          body.classList.add('from-slate-900', 'via-indigo-950', 'to-slate-800');
+          document.querySelectorAll('h1, h2, h3, p, span, li').forEach(el => {
+            el.classList.remove('text-gray-800');
+            el.classList.add('text-white');
+          });
+        } else {
+          this.innerHTML = '<i class="fa fa-sun-o"></i>';
+          body.classList.remove('from-slate-900', 'via-indigo-950', 'to-slate-800');
+          body.classList.add('from-gray-50', 'via-gray-100', 'to-gray-200');
+          document.querySelectorAll('h1, h2, h3, p, span, li').forEach(el => {
+            el.classList.remove('text-white');
+            el.classList.add('text-gray-800');
+          });
+        }
+      });
+      
+      // 发送消息函数
+      function sendMessage() {
+        const message = userInput.value.trim();
+        if (!message) return;
+        
+        // 显示用户消息
+        showMessage(message, 'user');
+        
+        // 清空输入框
+        userInput.value = '';
+        userInput.style.height = 'auto';
+        
+        // 显示AI回复
+        showLoading(true);
+        
+        // 模拟AI思考延迟
+        setTimeout(() => {
+          showLoading(false);
+          
+          // 根据消息内容生成不同回复
+          let response = '';
+          
+          if (message.toLowerCase().includes('你好') || message.toLowerCase().includes('hi')) {
+            response = '你好！很高兴为你服务。有什么我可以帮助你的吗？可以尝试上传一张图片让我识别，或者问我一些问题。';
+          } else if (message.toLowerCase().includes('识别') || message.toLowerCase().includes('是什么')) {
+            response = '请上传一张图片，我会尽力识别图片中的内容。点击左侧的图片图标可以选择图片。';
+          } else if (message.toLowerCase().includes('天气')) {
+            response = '抱歉，我目前无法获取实时天气信息。你可以尝试问我其他问题，或者上传图片让我识别。';
+          } else {
+            response = `你问的是"${message}"。这是一个很好的问题！由于我是一个演示版本，我的知识库有限，但我可以帮你识别图片中的物体。试试看上传一张图片吧！`;
+          }
+          
+          showMessage(response, 'ai');
+        }, 1500);
+      }
+      
+      // 显示消息函数
+      function showMessage(text, sender) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'animate-fade-in';
+        
+        let html = '';
+        if (sender === 'user') {
+          html = `
+            <div class="flex items-start gap-3 justify-end">
+              <div class="glass rounded-xl p-4 max-w-[85%] bg-primary/20 border border-primary/30 animate-scale">
+                <p>${text.replace(/\n/g, '<br>')}</p>
+              </div>
+              <div class="w-9 h-9 rounded-full overflow-hidden flex-shrink-0">
+                <img src="https://picsum.photos/id/64/100/100" alt="用户头像" class="w-full h-full object-cover">
+              </div>
+            </div>
+          `;
+        } else {
+          html = `
+            <div class="flex items-start gap-3">
+              <div class="w-9 h-9 rounded-full bg-gradient-to-r from-primary to-accent flex items-center justify-center flex-shrink-0">
+                <i class="fa fa-brain"></i>
+              </div>
+              <div class="glass rounded-xl p-4 max-w-[85%] animate-scale">
+                <p>${text.replace(/\n/g, '<br>')}</p>
+              </div>
+            </div>
+          `;
+        }
+        
+        messageDiv.innerHTML = html;
+        chatMessages.appendChild(messageDiv);
+        
+        // 滚动到底部
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+      
+      // 显示/隐藏加载状态
+      function showLoading(show) {
+        if (show) {
+          loadingModal.classList.remove('hidden');
+        } else {
+          loadingModal.classList.add('hidden');
+        }
+      }
+      
+      // 加载AI模型
+      function loadAIModel() {
+        showLoading(true);
+        
+        // 加载MobileNet模型
+        mobilenet.load().then(model => {
+          mobilenetModel = model;
+          showLoading(false);
+          showMessage('模型加载完成，可以开始识别图片了！', 'ai');
+        }).catch(err => {
+          showLoading(false);
+          showMessage('模型加载失败: ' + err.message, 'ai');
+          console.error('模型加载错误:', err);
+        });
+      }
+      
+      // 显示识别结果
+      function displayRecognitionResults(predictions) {
+        // 更新识别结果面板
+        if (predictions.length > 0) {
+          const topPrediction = predictions[0];
+          recognitionResult.innerHTML = `
+            <div class="mb-2">
+              <i class="fa fa-check-circle text-secondary text-xl"></i>
+            </div>
+            <h3 class="font-medium text-lg mb-1">${topPrediction.className}</h3>
+            <p class="text-sm text-neutral">可信度: ${Math.round(topPrediction.probability * 100)}%</p>
+          `;
+        }
+        
+        // 更新图表
+        const labels = predictions.map(p => p.className.split(',')[0]);
+        const data = predictions.map(p => Math.round(p.probability * 100));
+        const colors = [
+          'rgba(0, 113, 227, 0.7)',
+          'rgba(52, 199, 89, 0.7)',
+          'rgba(175, 82, 222, 0.7)',
+          'rgba(255, 149, 0, 0.7)',
+          'rgba(255, 59, 48, 0.7)'
+        ];
+        
+        recognitionChart.data.labels = labels;
+        recognitionChart.data.datasets[0].data = data;
+        recognitionChart.data.datasets[0].backgroundColor = colors.slice(0, predictions.length);
+        recognitionChart.update();
+      }
+      
+      // 初始化图表
+      function initChart() {
+        const ctx = document.getElementById('recognitionChart').getContext('2d');
+        
+        recognitionChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: [],
+            datasets: [{
+              data: [],
+              backgroundColor: [],
+              borderWidth: 0,
+              hoverOffset: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: {
+                  color: isDarkMode ? '#fff' : '#333',
+                  font: {
+                    size: 10
+                  },
+                  padding: 10
+                }
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    return `${context.label}: ${context.raw}%`;
+                  }
+                }
+              }
+            },
+            animation: {
+              animateScale: true,
+              animateRotate: true
+            }
+          }
+        });
+      }
+      
+      // 更新时间
+      function updateTime() {
+        const now = new Date();
+        let hours = now.getHours();
+        let minutes = now.getMinutes();
+        
+        // 格式化时间
+        hours = hours < 10 ? '0' + hours : hours;
+        minutes = minutes < 10 ? '0' + minutes : minutes;
+        
+        currentTime.textContent = `${hours}:${minutes}`;
+      }
+    });
+  </script>
+</body>
+</html>
